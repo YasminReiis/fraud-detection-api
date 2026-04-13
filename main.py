@@ -1,24 +1,19 @@
-from fastapi import FastAPI
-from pydantic import BaseModel
-from model import predict_fraud
-from db import save_transaction, get_status
+app = FastAPI(
+    title="🚨 Real-Time Fraud Detection API",
+    description="""
+API de detecção de fraude em tempo real.
 
-app = FastAPI()
+Este sistema simula análise de transações bancárias usando regras e lógica de machine learning.
 
-class Transaction(BaseModel):
-    user_id: int
-    amount: float
-    location: str
+Funcionalidades:
+- Análise de transações
+- Classificação de fraude
+- Consulta de status por usuário
 
-@app.post("/transaction")
-def process_transaction(tx: Transaction):
-    result = predict_fraud(tx.dict())
-    status = "FRAUDE" if result == 1 else "OK"
-
-    save_transaction(tx.user_id, tx.amount, status)
-
-    return {"status": status}
-
-@app.get("/status/{user_id}")
-def check_status(user_id: int):
-    return {"status": get_status(user_id)}
+Tecnologias:
+- FastAPI
+- Deploy em Cloud (Render)
+- Lógica de ML simulada
+""",
+    version="1.0.0"
+)
