@@ -1,31 +1,29 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel
 import random
+import jwt
+
+# segredo simples (depois dá pra melhorar)
+SECRET = "meu_segredo_super"
 
 app = FastAPI(
     title="🚨 Real-Time Fraud Detection API",
     description="""
 Sistema de detecção de fraude em tempo real.
 
-Essa API simula análise de transações bancárias utilizando regras simples
-e lógica inspirada em machine learning.
-
 Funcionalidades:
-- Analisar transações
-- Detectar possíveis fraudes
-- Consultar status por usuário
-
-Tecnologias:
-- FastAPI
-- Python
-- Deploy em Cloud (Render)
+- Login com token (JWT)
+- Análise de transações
+- Detecção de fraude
+- Consulta de status
 """,
-    version="1.0.0"
+    version="1.1.0"
 )
 
-# "banco" simples (memória)
+# "banco" simples
 fake_db = {}
 
+# modelo da transação
 class Transaction(BaseModel):
     user_id: int
     amount: float
@@ -40,15 +38,26 @@ class Transaction(BaseModel):
             }
         }
 
-# página inicial (remove erro Not Found)
+# rota inicial
 @app.get("/")
 def home():
     return {
-        "message": "🚀 Fraud Detection API está online",
+        "name": "Fraud Detection API",
+        "status": "online",
+        "version": "1.1.0",
         "docs": "/docs"
     }
 
-# lógica simples de fraude
+# LOGIN (gera token)
+@app.post("/login", summary="Gerar token de acesso")
+def login():
+    token = jwt.encode({"user_id": 1}, SECRET, algorithm="HS256")
+    return {
+        "success": True,
+        "token": token
+    }
+
+# função de fraude
 def predict_fraud(transaction):
     score = 0
 
@@ -63,26 +72,39 @@ def predict_fraud(transaction):
 
     return "FRAUDE" if score >= 2 else "OK"
 
-# endpoint principal (melhorado)
-@app.post("/transactions/analyze", summary="Analisar transação para possível fraude")
-def analyze_transaction(tx: Transaction):
+# endpoint protegido
+@app.post("/transactions/analyze", summary="Analisar transação para fraude")
+def analyze_transaction(tx: Transaction, authorization: str = Header(...)):
+
+    # validar token
+    try:
+        jwt.decode(authorization, SECRET, algorithms=["HS256"])
+    except:
+        raise HTTPException(status_code=401, detail="Token inválido")
+
     status = predict_fraud(tx.dict())
 
     fake_db[tx.user_id] = status
 
     return {
-        "user_id": tx.user_id,
-        "amount": tx.amount,
-        "status": status,
+        "success": True,
+        "data": {
+            "user_id": tx.user_id,
+            "amount": tx.amount,
+            "status": status
+        },
         "message": "Transação analisada com sucesso"
     }
 
-# endpoint de consulta (melhorado)
+# consulta
 @app.get("/transactions/{user_id}/status", summary="Consultar status da transação")
 def get_status(user_id: int):
     status = fake_db.get(user_id, "Sem dados")
 
     return {
-        "user_id": user_id,
-        "status": status
+        "success": True,
+        "data": {
+            "user_id": user_id,
+            "status": status
+        }
     }
