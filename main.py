@@ -10,33 +10,15 @@ SECRET = "super_secret_key"
 app = FastAPI(
     title="🚨 Real-Time Fraud Detection API",
     description="Production-ready API with authentication",
-    version="3.0.0",
-    openapi_tags=[
-        {"name": "Auth", "description": "Authentication"},
-        {"name": "Core", "description": "Core endpoints"},
-        {"name": "Transactions", "description": "Transaction operations"}
-    ]
+    version="3.0.0"
 )
 
 fake_db = {}
-
-# ================= MODEL =================
 
 class Transaction(BaseModel):
     user_id: int
     amount: float
     location: str
-
-    class Config:
-        schema_extra = {
-            "example": {
-                "user_id": 1,
-                "amount": 2500,
-                "location": "US"
-            }
-        }
-
-# ================= UTILS =================
 
 def build_response(success, data=None, message="", error=None):
     return {
@@ -65,51 +47,46 @@ def verify_token(token):
     except:
         raise HTTPException(status_code=401, detail="Invalid token")
 
-# ================= ROUTES =================
-
-@app.get("/", tags=["Core"])
+@app.get("/")
 def home():
     return build_response(True, {"service": "fraud-api"}, "Running")
 
-@app.get("/health", tags=["Core"])
+@app.get("/health")
 def health():
     return build_response(True, {"status": "ok"}, "Healthy")
 
-# LOGIN
-@app.post("/v1/auth/login", tags=["Auth"])
+# 🔐 LOGIN
+@app.post("/v1/auth/login")
 def login():
     token = jwt.encode({"user_id": 1}, SECRET, algorithm="HS256")
     return build_response(True, {"token": token}, "Token generated")
 
-# TRANSACTION
-@app.post("/v1/transactions/analyze", tags=["Transactions"])
+# 🔒 PROTEGIDO
+@app.post("/v1/transactions/analyze")
 def analyze_transaction(tx: Transaction, authorization: str = Header(...)):
-    
+
     verify_token(authorization)
 
     status = predict_fraud(tx.dict())
     fake_db[tx.user_id] = status
 
-    return build_response(
-        True,
-        {
-            "user_id": tx.user_id,
-            "amount": tx.amount,
-            "status": status
-        },
-        "Transaction processed"
-    )
+    return build_response(True, {
+        "user_id": tx.user_id,
+        "amount": tx.amount,
+        "status": status
+    }, "Transaction processed")
 
-@app.get("/v1/transactions/{user_id}/status", tags=["Transactions"])
+@app.get("/v1/transactions/{user_id}/status")
 def get_status(user_id: int, authorization: str = Header(...)):
-    
+
     verify_token(authorization)
 
     status = fake_db.get(user_id, "Sem dados")
 
-    return build_response(True, {"user_id": user_id, "status": status}, "OK")
-
-# ================= ERROR =================
+    return build_response(True, {
+        "user_id": user_id,
+        "status": status
+    }, "OK")
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
