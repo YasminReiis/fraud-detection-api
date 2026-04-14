@@ -1,29 +1,35 @@
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+from datetime import datetime
 import random
-import jwt
-
-# segredo simples (depois dá pra melhorar)
-SECRET = "meu_segredo_super"
 
 app = FastAPI(
     title="🚨 Real-Time Fraud Detection API",
     description="""
-Sistema de detecção de fraude em tempo real.
+Production-ready API for fraud detection.
 
-Funcionalidades:
-- Login com token (JWT)
-- Análise de transações
-- Detecção de fraude
-- Consulta de status
+Features:
+- Transaction analysis
+- Fraud detection logic
+- Standardized responses
+- Global error handling
+- Health check endpoint
+- API versioning (/v1)
+
+Use case:
+Simulates how financial systems detect suspicious transactions in real-time.
 """,
-    version="1.1.0"
+    version="2.0.0"
 )
 
-# "banco" simples
+# banco simples (simulação)
 fake_db = {}
 
-# modelo da transação
+# ==============================
+# MODELS
+# ==============================
+
 class Transaction(BaseModel):
     user_id: int
     amount: float
@@ -38,26 +44,19 @@ class Transaction(BaseModel):
             }
         }
 
-# rota inicial
-@app.get("/")
-def home():
+# ==============================
+# UTIL
+# ==============================
+
+def build_response(success: bool, data=None, message="", error=None):
     return {
-        "name": "Fraud Detection API",
-        "status": "online",
-        "version": "1.1.0",
-        "docs": "/docs"
+        "success": success,
+        "timestamp": datetime.utcnow().isoformat(),
+        "data": data,
+        "message": message,
+        "error": error
     }
 
-# LOGIN (gera token)
-@app.post("/login", summary="Gerar token de acesso")
-def login():
-    token = jwt.encode({"user_id": 1}, SECRET, algorithm="HS256")
-    return {
-        "success": True,
-        "token": token
-    }
-
-# função de fraude
 def predict_fraud(transaction):
     score = 0
 
@@ -72,39 +71,67 @@ def predict_fraud(transaction):
 
     return "FRAUDE" if score >= 2 else "OK"
 
-# endpoint protegido
-@app.post("/transactions/analyze", summary="Analisar transação para fraude")
-def analyze_transaction(tx: Transaction, authorization: str = Header(...)):
+# ==============================
+# ROUTES
+# ==============================
 
-    # validar token
-    try:
-        jwt.decode(authorization, SECRET, algorithms=["HS256"])
-    except:
-        raise HTTPException(status_code=401, detail="Token inválido")
+@app.get("/", summary="Home")
+def home():
+    return build_response(
+        True,
+        {
+            "service": "fraud-detection-api",
+            "version": "2.0.0",
+            "docs": "/docs"
+        },
+        "API is running"
+    )
 
+@app.get("/health", summary="Health Check")
+def health():
+    return build_response(True, {"status": "ok"}, "Service healthy")
+
+@app.post("/v1/transactions/analyze", summary="Analyze transaction for fraud")
+def analyze_transaction(tx: Transaction):
     status = predict_fraud(tx.dict())
 
     fake_db[tx.user_id] = status
 
-    return {
-        "success": True,
-        "data": {
+    return build_response(
+        True,
+        {
             "user_id": tx.user_id,
             "amount": tx.amount,
             "status": status
         },
-        "message": "Transação analisada com sucesso"
-    }
+        "Transaction processed successfully"
+    )
 
-# consulta
-@app.get("/transactions/{user_id}/status", summary="Consultar status da transação")
+@app.get("/v1/transactions/{user_id}/status", summary="Get transaction status")
 def get_status(user_id: int):
     status = fake_db.get(user_id, "Sem dados")
 
-    return {
-        "success": True,
-        "data": {
+    return build_response(
+        True,
+        {
             "user_id": user_id,
             "status": status
-        }
-    }
+        },
+        "Status retrieved successfully"
+    )
+
+# ==============================
+# GLOBAL ERROR HANDLER
+# ==============================
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    return JSONResponse(
+        status_code=500,
+        content=build_response(
+            False,
+            None,
+            "Internal server error",
+            str(exc)
+        ),
+    )
